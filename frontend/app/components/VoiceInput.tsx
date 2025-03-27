@@ -9,24 +9,34 @@ interface VoiceInputProps {
   setIsListening: (isListening: boolean) => void;
 }
 
+interface SpeechRecognitionEvent {
+  results: {
+    transcript: string;
+    isFinal: boolean;
+  }[][];
+}
+
+type SpeechRecognition = any;
+
 const VoiceInput = ({ onTranscript, isListening, setIsListening }: VoiceInputProps) => {
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
     let recognition: SpeechRecognition | null = null;
 
-    if (typeof window !== 'undefined' && 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognition = new SpeechRecognition();
+    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognitionAPI();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
         setError('');
+        setIsListening(true);
       };
 
-      recognition.onerror = (event) => {
+      recognition.onerror = (event: { error: string }) => {
         setError('Error occurred in recognition: ' + event.error);
         setIsListening(false);
       };
@@ -35,22 +45,24 @@ const VoiceInput = ({ onTranscript, isListening, setIsListening }: VoiceInputPro
         setIsListening(false);
       };
 
-      recognition.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
-
-        onTranscript(transcript);
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const lastResult = event.results[event.results.length - 1];
+        if (lastResult && lastResult[0]) {
+          onTranscript(lastResult[0].transcript);
+        }
       };
 
       if (isListening) {
         try {
           recognition.start();
-        } catch (err) {
-          console.error('Error starting recognition:', err);
-          setError('Failed to start voice recognition');
-          setIsListening(false);
+        } catch (error) {
+          console.error('Error starting recognition:', error);
+        }
+      } else {
+        try {
+          recognition.stop();
+        } catch (error) {
+          console.error('Error stopping recognition:', error);
         }
       }
     } else {
@@ -59,40 +71,26 @@ const VoiceInput = ({ onTranscript, isListening, setIsListening }: VoiceInputPro
 
     return () => {
       if (recognition) {
-        try {
-          recognition.stop();
-        } catch (err) {
-          console.error('Error stopping recognition:', err);
-        }
+        recognition.stop();
       }
     };
-  }, [isListening, onTranscript, setIsListening]);
-
-  const toggleListening = () => {
-    setIsListening(!isListening);
-  };
+  }, [isListening, onTranscript]);
 
   return (
-    <div className="relative">
+    <div className="relative inline-block">
       <button
-        onClick={toggleListening}
-        className={`p-2 md:p-3 rounded-lg transition-colors ${
+        onClick={() => setIsListening(!isListening)}
+        className={`p-2 rounded-full ${
           isListening
-            ? 'bg-red-500 text-white hover:bg-red-600'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-        } ${error ? 'opacity-50 cursor-not-allowed' : ''}`}
-        title={isListening ? 'Stop recording' : 'Start recording'}
-        disabled={!!error}
-        aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+            ? 'bg-red-500 hover:bg-red-600'
+            : 'bg-blue-500 hover:bg-blue-600'
+        } text-white transition-colors`}
+        title={isListening ? 'Stop listening' : 'Start listening'}
       >
-        {isListening ? (
-          <FiMicOff className="h-4 w-4 md:h-5 md:w-5" />
-        ) : (
-          <FiMic className="h-4 w-4 md:h-5 md:w-5" />
-        )}
+        {isListening ? <FiMicOff size={24} /> : <FiMic size={24} />}
       </button>
       {error && (
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs bg-red-100 text-red-600 rounded whitespace-nowrap">
+        <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-600 px-2 py-1 rounded text-sm whitespace-nowrap">
           {error}
         </div>
       )}
