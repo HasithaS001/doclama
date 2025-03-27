@@ -1,0 +1,451 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 241, 245, 249;
+  --primary-color: #0072df;
+  --primary-dark: #0058ad;
+  --secondary-color: #64748b;
+  --success-color: #22c55e;
+  --error-color: #ef4444;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  min-height: 100vh;
+}
+
+/* Base Styles */
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: white;
+  color: #374151;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:hover {
+  background-color: #f9fafb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.card {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.input {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-color);
+  border-color: transparent;
+}
+
+.sidebar {
+  background-color: white;
+  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.05);
+  border-right: 1px solid #f3f4f6;
+  height: 100%;
+  transition: all 0.2s;
+}
+
+.chat-message {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.chat-message-user {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.chat-message-assistant {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.message-content {
+  white-space: pre-line;
+}
+
+.message-content a {
+  color: var(--primary-color);
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.message-content a:hover {
+  color: var(--primary-dark);
+}
+
+.message-content ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.message-content li {
+  margin: 0.25rem 0;
+}
+
+.upload-zone {
+  border: 2px dashed #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.upload-zone:hover {
+  border-color: var(--primary-color);
+}
+
+.nav-link {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  color: #4b5563;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  color: #111827;
+  background-color: #f9fafb;
+}
+
+.nav-link-active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.nav-link-active:hover {
+  background-color: var(--primary-dark);
+}
+
+.gradient-header {
+  background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.success-message {
+  color: var(--success-color);
+  background-color: #f0fdf4;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.error-message {
+  color: var(--error-color);
+  background-color: #fef2f2;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  border-top-color: var(--primary-color);
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.document-card {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  border: 1px solid #f3f4f6;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.document-card:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.document-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background-color: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.chat-input-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background-color: white;
+  border-top: 1px solid #f3f4f6;
+}
+
+.chat-input {
+  flex: 1;
+  min-height: 2.75rem;
+  max-height: 7.5rem;
+  resize: none;
+  padding: 0.5rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.chat-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-color);
+  border-color: transparent;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.empty-state-icon {
+  margin: 0 auto;
+  height: 4rem;
+  width: 4rem;
+  color: #d1d5db;
+  margin-bottom: 1rem;
+}
+
+.empty-state-text {
+  color: #6b7280;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-subtext {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* PDF Viewer Styles */
+.pdf-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.pdf-container .react-pdf__Document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pdf-container .react-pdf__Page {
+  margin-bottom: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-container .react-pdf__Page__canvas {
+  border-radius: 4px;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #3b82f6;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Upload Progress Bar */
+.upload-progress-container {
+  width: 100%;
+  background-color: #f3f4f6;
+  border-radius: 9999px;
+  height: 0.5rem;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.upload-progress-bar {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.3s ease;
+}
+
+/* Make sure whitespace is preserved in chat messages */
+.chat-message-content {
+  white-space: pre-line;
+}
+
+.chat-message-content a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.chat-message-content a:hover {
+  text-decoration: none;
+}
+
+/* Improve drag and drop area */
+.dropzone {
+  border: 2px dashed #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.dropzone:hover, .dropzone.active {
+  border-color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* DocxViewer light mode override */
+.light-mode-only {
+  background-color: white !important;
+  color: black !important;
+}
+
+.light-mode-only * {
+  color: black !important;
+  background-color: white !important;
+  border-color: #e5e7eb !important;
+}
+
+.light-mode-only h1, 
+.light-mode-only h2, 
+.light-mode-only h3, 
+.light-mode-only h4, 
+.light-mode-only h5, 
+.light-mode-only h6 {
+  color: #111827 !important;
+}
+
+.light-mode-only a {
+  color: #3b82f6 !important;
+}
+
+.light-mode-only p, 
+.light-mode-only span, 
+.light-mode-only div, 
+.light-mode-only li {
+  color: #374151 !important;
+}
+
+.light-mode-only table {
+  border-collapse: collapse;
+}
+
+.light-mode-only table, 
+.light-mode-only th, 
+.light-mode-only td {
+  border: 1px solid #d1d5db !important;
+}
+
+.light-mode-only th, 
+.light-mode-only td {
+  padding: 8px;
+  text-align: left;
+}
+
+.light-mode-only th {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
