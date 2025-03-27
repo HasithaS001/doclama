@@ -26,6 +26,7 @@
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.5",
     "framer-motion": "^12.6.0",
+    "long": "^5.2.3",
     "mammoth": "^1.9.0",
     "next": "^14.2.25",
     "pdfjs-dist": "^3.4.120",
@@ -39,6 +40,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/long": "^5.0.0",
     "@types/node": "^20.17.24",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
