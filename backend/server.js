@@ -27,6 +27,7 @@ app.use(cors({
     
     const allowedOrigins = [
       'http://localhost:3000',
+      'http://localhost:5000',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:63923', // Browser preview origin
       /^http:\/\/127\.0\.0\.1:\d+$/, // Any 127.0.0.1 with any port
@@ -230,26 +231,27 @@ let supabase;
 try {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
-  
+
   if (!supabaseUrl || !supabaseKey) {
     throw new Error('Supabase credentials not found');
   }
-  
+
   supabase = createClient(supabaseUrl, supabaseKey);
   console.log('Supabase client initialized successfully');
-  
-  // Test the connection
-  supabase.from('documents').select('id').limit(1)
-    .then(({ data, error }) => {
-      if (error) {
-        console.error('Error testing Supabase connection:', error);
-      } else {
-        console.log('Supabase connection test successful');
-      }
-    })
-    .catch(error => {
-      console.error('Error testing Supabase connection:', error);
-    });
+
+  // ✅ Correct way to test Storage instead of querying a non-existent table
+  supabase.storage.from('documents').list()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Error testing Supabase Storage connection:', error);
+        } else {
+          console.log('Supabase Storage connection test successful:', data.length, 'files found');
+        }
+      })
+      .catch(error => {
+        console.error('Error testing Supabase Storage connection:', error);
+      });
+
 } catch (error) {
   console.error('Error initializing Supabase client:', error);
   supabase = null;
@@ -278,6 +280,7 @@ const safeSupabaseOperation = async (operation, fallbackData = null) => {
 // Initialize global document store
 global.docStore = [];
 console.log('Initialized global document store');
+console.log(global.docStore);
 
 // Initialize global chat history
 global.chatHistory = {};
@@ -285,7 +288,7 @@ console.log('Initialized global chat history');
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 // Add a fallback response function for when AI is unavailable
 const getFallbackResponse = (question) => {
@@ -323,6 +326,7 @@ const storage = multer.diskStorage({
     
     cb(null, uploadDir);
   },
+
   filename: (req, file, cb) => {
     // Generate a unique filename with original extension
     const ext = path.extname(file.originalname);
@@ -392,175 +396,102 @@ app.post('/api/test-upload', (req, res) => {
 });
 
 // Upload endpoint with local fallback
-app.post('/api/upload', (req, res) => {
-  console.log('Upload endpoint called');
-  
-  // First check if uploads directory exists and is writable
-  const uploadDir = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(uploadDir)) {
-    try {
-      fs.mkdirSync(uploadDir, { recursive: true });
-      console.log('Created uploads directory');
-    } catch (err) {
-      console.error('Error creating uploads directory:', err);
-      return res.status(500).json({ error: 'Server error: Could not create uploads directory' });
-    }
-  }
-  
-  // Check if directory is writable
+app.post('/api/upload', async (req, res) => {
   try {
-    fs.accessSync(uploadDir, fs.constants.W_OK);
-    console.log('Uploads directory is writable');
-  } catch (err) {
-    console.error('Uploads directory is not writable:', err);
-    return res.status(500).json({ error: 'Server error: Uploads directory is not writable' });
-  }
-  
-  // Handle the upload
-  upload(req, res, async (err) => {
-    if (err) {
-      console.error('1. Upload error:', err);
-      return res.status(400).json({ error: err.message });
-    }
-    
-    if (!req.file) {
-      console.error('2. No file provided');
-      return res.status(400).json({ error: 'No file provided' });
-    }
-    
-    try {
-      console.log('3. File received:', req.file.originalname, '(', req.file.mimetype, ')');
-      console.log('File path:', req.file.path);
-      
-      // Verify that the file exists
-      if (!fs.existsSync(req.file.path)) {
-        throw new Error(`File not found at path: ${req.file.path}`);
-      }
-      
-      // Extract text from the document
-      console.log('4. Attempting to extract text from document');
-      let extractedText = '';
-      
-      try {
-        extractedText = await extractTextFromDocument(req.file.path, req.file.mimetype);
-        console.log('5. Text extraction successful');
-      } catch (extractError) {
-        console.error('5. Text extraction failed:', extractError);
-        extractedText = 'Text extraction failed. You can still chat with this document.';
-        // Continue with upload even if text extraction fails
-      }
-      
-      // Create document record with a unique ID and timestamp
-      const docId = uuidv4();
-      const timestamp = new Date().toISOString();
-      const uniqueFilename = `${path.parse(req.file.originalname).name}_${Date.now()}${path.parse(req.file.originalname).ext}`;
-      
-      const docData = {
-        id: docId,
-        filename: req.file.originalname,
-        uniqueFilename: uniqueFilename,
-        type: req.file.mimetype.includes('pdf') ? 'pdf' : 'word',
-        uploadTime: timestamp
-      };
-      
-      console.log('6. Document data prepared:', docData);
-      
-      // Save document to database
-      console.log('7. Attempting to save to database');
-      
-      // Try to save to Supabase first - always as a new record
-      let dbError = null;
-      try {
-        const { error } = await supabase.from('documents').insert([{
-          id: docId,
-          filename: req.file.originalname,
-          unique_filename: uniqueFilename,
-          type: req.file.mimetype.includes('pdf') ? 'pdf' : 'word',
-          content: extractedText,
-          created_at: timestamp,
-          url: `/uploads/${path.basename(req.file.path)}`,
-          file_path: req.file.path
-        }]);
-        
-        dbError = error;
-      } catch (supabaseError) {
-        console.error('Supabase operation failed:', supabaseError);
-        dbError = supabaseError;
-      }
-      
-      if (dbError) {
-        console.log('8. Database save failed, using local fallback:', dbError);
-        // Add to local document store as fallback - always as a new record
-        const localDoc = {
-          ...docData,
-          content: extractedText,
-          created_at: timestamp,
-          url: `/uploads/${path.basename(req.file.path)}`
-        };
-        localDocumentStore.push(localDoc);
-      } else {
-        console.log('8. Document saved to database successfully');
-      }
-      
-      // Save to in-memory store - always as a new record at the beginning of the array
-      global.docStore.unshift({
-        ...docData,
-        content: extractedText,
-        url: `/uploads/${path.basename(req.file.path)}`,
-        path: req.file.path  // Add the full file path
-      });
-      console.log('9. Document saved to memory store');
-      
-      // Return success response
-      console.log('10. Sending success response');
-      return res.status(200).json({
-        message: 'Document uploaded successfully',
-        document: {
-          id: docId,
-          filename: req.file.originalname,
-          uniqueFilename: uniqueFilename,
-          type: req.file.mimetype.includes('pdf') ? 'pdf' : 'word',
-          url: `/uploads/${path.basename(req.file.path)}`,
-          content: extractedText,
-          uploadTime: timestamp
-        }
-      });
-    } catch (error) {
-      console.error('Upload processing error:', error);
-      return res.status(500).json({ error: 'Failed to upload file: ' + error.message });
-    }
-  });
-});
+    console.log('Upload endpoint called');
+    console.log(req.file);
 
-// Function to extract text from document
-async function extractTextFromDocument(filePath, mimeType) {
-  try {
-    console.log(`Extracting text from ${filePath} with mime type ${mimeType}`);
-    
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found at path: ${filePath}`);
+    // Validate file existence
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const { originalname, mimetype, path: tempPath, size } = req.file;
+    console.log('File received:', originalname, '(', mimetype, ')');
+
+    // Create a unique filename
+    const uniqueFilename = `${path.parse(originalname).name}_${Date.now()}${path.extname(originalname)}`;
+    const uploadDir = path.join(__dirname, 'uploads');
+
+    // Ensure uploads directory exists
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    // Verify that file exists
+    try {
+      await fs.access(tempPath);
+    } catch (err) {
+      throw new Error(`File not found at path: ${tempPath}`);
     }
-    
-    if (mimeType === 'application/pdf') {
-      // Extract text from PDF
-      const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdf(dataBuffer);
-      console.log('Successfully extracted text from PDF');
-      return data.text;
-    } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
-               mimeType === 'application/msword') {
-      // Extract text from Word document
-      const docBuffer = fs.readFileSync(filePath);
-      const result = await mammoth.extractRawText({ buffer: docBuffer });
-      console.log('Successfully extracted text from Word document');
-      return result.value;
-    } else {
-      throw new Error(`Unsupported document type: ${mimeType}`);
+
+    // Attempt to extract text from the document (if applicable)
+    let extractedText = '';
+    try {
+      extractedText = await extractTextFromDocument(tempPath, mimetype);
+      console.log('Text extraction successful');
+    } catch (extractError) {
+      console.error('Text extraction failed:', extractError);
+      extractedText = 'Text extraction failed. You can still chat with this document.';
     }
+
+    // Generate document metadata
+    const timestamp = new Date().toISOString();
+    const documentData = {
+      filename: originalname,
+      unique_filename: uniqueFilename,
+      type: mimetype.includes('pdf') ? 'pdf' : 'word',
+      size,
+      content: extractedText,
+      created_at: timestamp,
+      url: `/uploads/${uniqueFilename}`
+    };
+
+    // Save to Supabase
+    const { error: dbError } = await supabase.from('documents').insert([documentData]);
+
+    if (dbError) {
+      console.error('Supabase save failed:', dbError);
+      return res.status(500).json({ error: 'Failed to save document to database' });
+    }
+
+    console.log('Document successfully saved to database');
+
+    return res.status(200).json({
+      message: 'Document uploaded successfully',
+      document: documentData
+    });
+
   } catch (error) {
-    console.error(`Error extracting text from document: ${error.message}`);
-    console.error('Error stack:', error.stack);
-    return null;
+    console.error('Upload processing error:', error);
+    return res.status(500).json({ error: `Upload failed: ${error.message}` });
+  }
+});
+// Function to extract text from document
+async function extractTextFromDocument(buffer, mimeType) {
+  console.log(`Extracting text from document, MIME Type: ${mimeType}`);
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    console.log("Handling .docx file");
+    return new Promise((resolve, reject) => {
+      mammoth.extractRawText({ buffer: buffer })
+          .then(result => {
+            console.log("Text extracted:", result.value);
+            resolve(result.value);
+          })
+          .catch(err => {
+            console.error("Error extracting text:", err);
+            reject(err);
+          });
+    });
+  } else if (mimeType === 'application/pdf') {
+    console.log("Handling PDF file");
+    const pdfParse = require('pdf-parse');
+    return pdfParse(buffer).then(data => {
+      console.log("PDF text extracted:", data.text);
+      return data.text;
+    }).catch(err => {
+      console.error("PDF extraction error:", err);
+      throw err;
+    });
+  } else {
+    console.error("Unsupported MIME type:", mimeType);
+    throw new Error('Unsupported document type');
   }
 }
 
@@ -633,28 +564,31 @@ app.post('/api/chat', async (req, res) => {
     if (!docId) {
       return res.status(400).json({ error: 'Document ID is required' });
     }
-    
+
     // Find document in the store
-    const doc = global.docStore.find(d => d.id === docId);
+    const doc = global.docStore.find(d => d.id === docId.toString());
     if (!doc) {
       return res.status(404).json({ error: 'Document not found' });
     }
+
     
-    let docContent = '';
-    
-    // Get document content based on type
-    if (doc.type === 'pdf' || doc.type === 'word') {
-      // For PDF and Word documents, use the existing content
-      docContent = doc.content || 'No content available for this document.';
-    } else if (doc.type === 'web') {
-      // For web articles, use the extracted content
-      docContent = doc.content || 'No content available for this web article.';
-    } else {
-      return res.status(400).json({ error: 'Unsupported document type' });
-    }
+    let docContent = doc.content;
+    console.log(docContent);
+    //
+    // console.log(doc);
+    // // Get document content based on type
+    // if (doc.type === 'pdf' || doc.type === 'word') {
+    //   // For PDF and Word documents, use the existing content
+    //   docContent = doc.content || 'No content available for this document.';
+    // } else if (doc.type === 'web') {
+    //   // For web articles, use the extracted content
+    //   docContent = doc.content || 'No content available for this web article.';
+    // } else {
+    //   return res.status(400).json({ error: 'Unsupported document type' });
+    // }
     
     // Check if Gemini API key is configured
-    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key') {
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === '') {
       console.log('Gemini API key not configured, returning mock response');
       
       // Create a mock response
@@ -711,7 +645,7 @@ app.post('/api/chat', async (req, res) => {
       console.log('Using chat session ID:', chatSessionId);
       
       // Initialize Gemini model
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       
       // Create a prompt that includes document context and user question
       const prompt = `You are an AI assistant that helps users understand and analyze documents. 
@@ -770,7 +704,7 @@ app.post('/api/chat', async (req, res) => {
             await supabase.from('chat_history').insert([{
               id: uuidv4(),
               user_id: req.body.userId || 'anonymous',
-              doc_id: docId,
+              doc_id: Number(docId),
               doc_name: doc.filename,
               doc_type: doc.type,
               question: '__new_chat_session__',
@@ -779,6 +713,8 @@ app.post('/api/chat', async (req, res) => {
               created_at: new Date().toISOString()
             }]);
           }
+
+
           
           // Insert the actual chat message
           const { error } = await supabase.from('chat_history').insert([{
@@ -994,128 +930,84 @@ app.post('/api/search', async (req, res) => {
 app.get('/api/documents/:id/content', async (req, res) => {
   try {
     const { id } = req.params;
-    
     console.log('Getting content for document:', id);
-    
-    if (!id) {
-      return res.status(400).json({ error: 'Document ID is required' });
-    }
-    
-    // Try to get document from Supabase
-    let doc = null;
-    let content = null;
-    
-    // First check if the document is already in the global store
+
+    if (!id) return res.status(400).json({ error: 'Document ID is required' });
+
+    // Check global cache first
     const cachedDoc = global.docStore.find(d => d.id === id);
     if (cachedDoc && cachedDoc.content) {
-      console.log('Document content found in global store');
-      return res.json({ content: cachedDoc.content });
+      console.log('Content found in global store');
+      return res.json({ content: cachedDoc.content, filename: cachedDoc.filename, type: cachedDoc.type });
     }
-    
-    // If not in global store, try to get from Supabase
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('documents')
-          .select('*')
-          .eq('id', id)
-          .single();
-        
-        if (!error && data) {
-          doc = data;
-          content = data.content;
-          console.log('Document found in Supabase');
-        }
-      } catch (error) {
-        console.error('Supabase query error:', error);
-        // Fall back to local store
-      }
+
+    // Get document metadata from Supabase DB
+    const { data: doc, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('id', Number(id))
+        .single();
+
+    if (error || !doc) {
+      console.error('Supabase DB fetch failed:', error);
+      return res.status(404).json({ error: 'Document not found' });
     }
-    
-    // If not found in Supabase, check local store
-    if (!doc) {
-      doc = localDocumentStore.find(d => d.id === id);
-      if (doc) {
-        content = doc.content;
-        console.log('Document found in local store');
-      }
+
+    if (doc.content) {
+      // Save in cache
+      global.docStore.push({ id, filename: doc.filename, type: doc.type ,content: doc.content });
+      return res.json({ content: doc.content, filename: doc.filename, type: doc.type });
     }
-    
-    // If document found but no content, try to extract from file
-    if (doc && !content) {
-      console.log('Document found but no content, trying to extract from file');
-      
-      // Get file path
-      const files = fs.readdirSync(uploadsDir);
-      
-      // Find the file that matches the document ID or filename
-      const matchingFile = files.find(file => 
-        file.includes(id) || 
-        (doc.filename && file.includes(doc.filename.replace(/\s+/g, '-')))
-      );
-      
-      if (!matchingFile) {
-        console.error('No matching file found for:', doc.filename);
-        return res.status(404).json({ error: 'Document file not found on disk' });
-      }
-      
-      const filePath = path.join(uploadsDir, matchingFile);
-      
-      // Determine file type from extension
-      const fileExt = path.extname(matchingFile).toLowerCase();
-      const mimeType = fileExt === '.pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      
-      try {
-        // Extract text from document
-        content = await extractTextFromDocument(filePath, mimeType);
-        console.log('Successfully extracted text from document');
-        
-        // Update document in Supabase if available
-        if (supabase) {
-          const { error } = await supabase
-            .from('documents')
-            .update({ content })
-            .eq('id', id);
-          
-          if (error) {
-            console.error('Error updating document content in Supabase:', error);
-          } else {
-            console.log('Document content updated in Supabase');
-          }
-        }
-        
-        // Update local document store
-        const docIndex = localDocumentStore.findIndex(d => d.id === id);
-        if (docIndex !== -1) {
-          localDocumentStore[docIndex].content = content;
-        } else {
-          localDocumentStore.push({ ...doc, content });
-        }
-        
-        // Update global document store
-        const globalDocIndex = global.docStore.findIndex(d => d.id === id);
-        if (globalDocIndex !== -1) {
-          global.docStore[globalDocIndex].content = content;
-        } else {
-          global.docStore.push({ id, content });
-        }
-        
-        console.log('Document content added to global store');
-      } catch (extractError) {
-        console.error('Error extracting text from document:', extractError);
-        return res.status(500).json({ error: 'Could not extract text from document' });
-      }
+
+    // If content is not present, fetch the file from Supabase Storage
+
+    const { data: fileData, error: fileError } = await supabase.storage
+        .from('documents').download(`${doc.user_id.toString()}/${doc.filename}`);
+
+    if (fileError || !fileData) {
+      console.error('Failed to download file from storage:', fileError);
+      return res.status(500).json({ error: 'Failed to download file from storage' });
     }
-    
-    if (!content) {
-      return res.status(404).json({ error: 'Document content not found' });
+
+    // Convert ReadableStream to Buffer
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+
+    // Determine mimeType from file extension
+    const ext = path.extname(doc.filename).toLowerCase();
+    const mimeType = ext === '.pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    // Extract text
+    let extractedText = '';
+    try {
+      extractedText = await extractTextFromDocument(buffer, mimeType);
+    } catch (extractError) {
+      console.error('Text extraction failed:', extractError);
+      return res.status(500).json({ error: 'Failed to extract text from document' });
     }
-    
-    res.json({ content });
+
+    // Update Supabase with content
+    await supabase
+        .from('documents')
+        .update({ content: extractedText })
+        .eq('id', Number(id));
+
+    // Save in global cache
+    global.docStore.push({ id, content: extractedText });
+
+    return res.json({ content: extractedText });
   } catch (error) {
     console.error('Error getting document content:', error);
-    res.status(500).json({ error: 'Server error while getting document content' });
+    return res.status(500).json({ error: 'Server error while getting document content' });
   }
+});
+
+
+
+app.post('/api/dev/clear-docstore', (req, res) => {
+  global.docStore.length = 0;
+  res.json({ message: 'global.docStore cleared' });
 });
 
 app.get('/api/document/:id', async (req, res) => {
@@ -1137,7 +1029,7 @@ app.get('/api/document/:id', async (req, res) => {
         const { data, error } = await supabase
           .from('documents')
           .select('*')
-          .eq('id', id)
+          .eq('id', Number(id))
           .single();
         
         if (error) {
@@ -1581,53 +1473,35 @@ app.get('/api/document-html/:id', async (req, res) => {
 });
 
 // Add a route to get document details by ID
-app.get('/api/documents/:docId', async (req, res) => {
+app.get('/api/documents', async (req, res) => {
   try {
-    const { docId } = req.params;
-    
-    if (!docId) {
-      return res.status(400).json({ error: 'Document ID is required' });
-    }
-    
-    if (!supabase) {
-      return res.status(503).json({ error: 'Database not available' });
-    }
-    
-    console.log(`Fetching document details for ID: ${docId}`);
-    
-    // Get document from Supabase
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', docId)
-      .single();
-      
+    const userId = req.query.userId || '';
+
+    // Get files from Supabase Storage
+    const { data, error } = await supabase.storage
+        .from('documents')
+        .list(userId);
+
     if (error) {
-      console.error('Error fetching document details:', error);
-      return res.status(500).json({ error: 'Failed to fetch document details' });
+      console.error('Error fetching documents:', error.message);
+      return res.status(500).json({ message: 'Failed to fetch documents' });
     }
-    
-    if (!data) {
-      console.log(`No document found with ID: ${docId}`);
-      return res.status(404).json({ error: 'Document not found' });
-    }
-    
-    console.log('Document details retrieved:', data);
-    
-    const document = {
-      id: data.id,
-      filename: data.filename || 'Unnamed Document',
-      created_at: data.created_at,
-      user_id: data.user_id
-    };
-    
-    res.status(200).json({ document });
+
+    // Transform response
+    const documents = data.map(file => ({
+      filename: file.name,
+      type: file.metadata?.mimetype || 'unknown',
+      url: `${process.env.SUPABASE_URL}/storage/v1/object/public/documents/${userId}/${file.name}`,
+      created_at: file.created_at
+    }));
+
+    return res.status(200).json({ documents });
+
   } catch (error) {
-    console.error('Error fetching document details:', error);
-    res.status(500).json({ error: 'Server error while fetching document details' });
+    console.error('Unexpected error fetching documents:', error);
+    return res.status(500).json({ message: `Unexpected server error: ${error.message}` });
   }
 });
-
 // User routes
 app.post('/api/users/update-email', async (req, res) => {
   try {
@@ -1702,29 +1576,6 @@ app.post('/api/users/update-password', async (req, res) => {
   }
 });
 
-// Document routes
-app.get('/api/documents', async (req, res) => {
-  try {
-    // Try to get documents from Supabase
-    const { data, error } = await safeSupabaseOperation(
-      async () => await supabase.from('documents').select('*').order('created_at', { ascending: false }),
-      []
-    );
-    
-    if (error) {
-      console.error('Error fetching documents from Supabase:', error);
-      // Fall back to local document store
-      console.log('Using local document store fallback with', localDocumentStore.length, 'documents');
-      return res.status(200).json({ documents: localDocumentStore });
-    }
-    
-    return res.status(200).json({ documents: data });
-  } catch (error) {
-    console.error('Error fetching documents:', error);
-    // Still return local documents in case of any error
-    return res.status(200).json({ documents: localDocumentStore });
-  }
-});
 
 app.delete('/api/documents/:id', async (req, res) => {
   try {
@@ -2072,35 +1923,6 @@ app.get('/api/chat-session/:sessionId/messages', async (req, res) => {
   }
 });
 
-// Get all documents
-app.get('/api/documents', async (req, res) => {
-  try {
-    let documents = [];
-    
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching documents from database:', error);
-      } else if (data) {
-        documents = data;
-      }
-    }
-    
-    // If no documents from database or database error, use local storage
-    if (documents.length === 0 && global.docStore) {
-      documents = global.docStore;
-    }
-    
-    res.status(200).json({ documents });
-  } catch (error) {
-    console.error('Error getting documents:', error);
-    res.status(500).json({ error: 'Failed to get documents' });
-  }
-});
 
 // Get chat sessions
 app.get('/api/chat-sessions', async (req, res) => {
@@ -2758,7 +2580,7 @@ app.post('/api/simple-upload', (req, res) => {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Start the server
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`http://localhost:${PORT}`);
