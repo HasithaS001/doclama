@@ -923,8 +923,6 @@ export default function Dashboard() {
     }
   };
 
-
-
   // Fix the handleDocumentSelect function
   const handleDocumentSelect = (doc: Document) => {
     console.log('Selected document:', doc);
@@ -2285,14 +2283,17 @@ export default function Dashboard() {
               {docs.map((doc) => (
                 <li key={doc.id}>
                   <button
-                    onClick={() => {
-                      setSelectedDoc(doc);
-                      setActiveTab('chat');
-                      setMessages([]);
-                      setInput('');
-                      setError(null);
-                      setMobileMenuOpen(false);
-                    }}
+                      onClick={async () => {
+                        setSelectedDoc(doc);
+                        setActiveTab('chat');
+                        setMessages([]);
+                        setInput('');
+                        setError(null);
+                        setMobileMenuOpen(false);
+
+                        // Load the document content
+                        await loadDocContent(doc);
+                      }}
                     className={`w-full text-left p-2 flex items-center hover:bg-gray-100 dark:hover:bg-gray-800 ${
                       selectedDoc?.id === doc.id
                         ? 'bg-blue-50 dark:bg-blue-900/20'
