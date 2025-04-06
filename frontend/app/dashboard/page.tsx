@@ -851,6 +851,8 @@ export default function Dashboard() {
       
       // Set the selected document first
       setSelectedDoc(doc);
+
+      console.log(doc.id)
       
       // Get document info with direct file URL
       const infoResponse = await fetch(`http://localhost:5000/api/document-info/${doc.id}`);
@@ -920,6 +922,7 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
+
 
 
   // Fix the handleDocumentSelect function
@@ -1391,18 +1394,34 @@ export default function Dashboard() {
       }
       
       // Send message to backend
-      console.log('Sending chat request with document ID:', selectedDoc.id);
-      const response = await fetch('http://localhost:5000/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: input,
-          docId: selectedDoc.id,
-          sessionId: currentSessionId
-        }),
-      });
+      let response;
+
+      if(user?.id) {
+        response = await fetch('http://localhost:5000/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: input,
+            docId: selectedDoc.id,
+            sessionId: currentSessionId,
+            userId: user.id
+          }),
+        });
+      } else {
+        response = await fetch('http://localhost:5000/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: input,
+            docId: selectedDoc.id,
+            sessionId: currentSessionId
+          }),
+        });
+      }
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -1427,41 +1446,17 @@ export default function Dashboard() {
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-      
+
+
       // Save chat history to Supabase
-      try {
-        const { error: supabaseError } = await supabase
-          .from('chat_history')
-          .insert([{
-            id: userMessage.id,
-            chat_session_id: currentSessionId,
-            role: 'user',
-            content: userMessage.content,
-            created_at: userMessage.timestamp,
-            document_id: selectedDoc.id
-          }, {
-            id: aiMessage.id,
-            chat_session_id: currentSessionId,
-            role: 'assistant',
-            content: aiMessage.content,
-            created_at: aiMessage.timestamp,
-            document_id: selectedDoc.id
-          }]);
-          
-        if (supabaseError) {
-          console.warn('Failed to save chat history to Supabase:', supabaseError);
-        } else {
-          console.log('Chat history saved to Supabase successfully');
-        }
-      } catch (supabaseError) {
-        console.error('Error saving chat history to Supabase:', supabaseError);
-      }
+
     } catch (error) {
       console.error('Error sending message:', error);
       setError(error instanceof Error ? error.message : 'Failed to send message');
       setIsLoading(false);
     }
   };
+
 
   // Load existing chat session if URL has docId and sessionId
   useEffect(() => {
@@ -2020,6 +2015,7 @@ export default function Dashboard() {
   };
 
   // Function to handle file upload
+// Function to handle file upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement> | File) => {
     try {
       setError(null);
@@ -2051,13 +2047,29 @@ export default function Dashboard() {
       const newDoc = await saveFileMetadata(file, publicUrl);
       if (!newDoc) return;
 
-      // Update state
+      // Update state - add the document to the list and select it
       setDocs(prevDocs => [newDoc, ...prevDocs]);
       setSelectedDoc(newDoc);
+
+      // Extract document content
+      const fileContent = await extractDocumentContent(newDoc.id);
+
+      // Update the document content in database
+      if (fileContent) {
+        await updateDocumentContent(newDoc.id, fileContent);
+
+        // Also update the newDoc object with content
+        newDoc.content = fileContent;
+      }
+
+      // Load document for preview (this will handle setting the viewMode)
+      await loadDocContent(newDoc);
+
+      // Set active tab to document or chat as needed
+      setActiveTab('document');
+
       setSuccessMessage("File uploaded successfully!");
 
-      // Load document content
-      await loadDocContent(newDoc);
     } catch (error) {
       console.error("Upload error:", error);
       setError(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -2067,6 +2079,47 @@ export default function Dashboard() {
     }
   };
 
+// Function to extract content from document
+  const extractDocumentContent = async (docId: string) => {
+    try {
+      // Create form data for content extraction
+
+      // Call content extraction endpoint
+      const response = await fetch(`http://localhost:5000/api/documents/${docId}/content`);
+
+      if (!response.ok) {
+        throw new Error(`Content extraction failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.content || '';
+    } catch (error) {
+      console.error('Content extraction error:', error);
+      return null;
+    }
+  };
+
+// Function to update document content in database
+  const updateDocumentContent = async (docId: string, content: string) => {
+    try {
+      // Update content in Supabase
+      const { error } = await supabase
+          .from('documents')
+          .update({ content })
+          .eq('id', docId);
+
+      if (error) {
+        console.error('Error updating document content in database:', error);
+        throw error;
+      }
+
+      console.log('Document content updated in database successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to update document content:', error);
+      return false;
+    }
+  };
 // Function to upload file to Supabase Storage
   const uploadFileToStorage = async (file: File, filePath: string) => {
     const { data, error } = await supabase.storage.from("documents").upload(filePath, file);
@@ -2109,7 +2162,8 @@ export default function Dashboard() {
       filename: data.filename,
       type: data.type as DocumentType,
       url: data.url,
-      created_at: data.created_at
+      created_at: data.created_at,
+      content: data.content,
     };
   };
 
@@ -2328,9 +2382,9 @@ export default function Dashboard() {
 
         {/* Document and Chat Area - Stacked on mobile, side by side on desktop */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          <div className="w-full md:w-1/2 overflow-y-auto p-4 md:p-10 whitespace-pre-wrap text-sm leading-relaxed bg-white dark:bg-gray-900">
-            {selectedDoc?.content}
-          </div>
+          {/*<div className="w-full md:w-1/2 overflow-y-auto p-4 md:p-10 whitespace-pre-wrap text-sm leading-relaxed bg-white dark:bg-gray-900">*/}
+          {/*  {selectedDoc?.content}*/}
+          {/*</div>*/}
           {/* Document viewer - Full width on mobile, half width on desktop */}
           <div className={`${mobileView === 'chat' ? 'hidden' : 'flex'} md:flex w-full md:w-1/2 border-r border-gray-200 dark:border-gray-700 flex-col h-[calc(100vh-100px)] md:h-auto`}>
             {selectedDoc ? (

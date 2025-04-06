@@ -18,15 +18,20 @@ import {
 } from 'react-icons/fi';
 import { format } from 'date-fns';
 import DocumentPreview from '../../../components/DocumentPreview';
+import {supabase} from "@/lib/supabase";
+
+
+type DocumentType = 'pdf' | 'word' | 'web';
 
 interface Document {
   id: string;
   filename: string;
-  type: string;
+  type: DocumentType;
   created_at: string;
   user_id?: string;
   size?: number;
 }
+
 
 export default function Documents() {
   const { user } = useAuth();
@@ -55,23 +60,68 @@ export default function Documents() {
     };
   }, []);
 
+  // Function to load Documents
   const loadDocs = async () => {
     try {
-      setMessage({ type: '', content: '' });
-      const response = await axios.get('http://localhost:5000/api/documents');
-      if (response.data && response.data.documents) {
-        setDocs(response.data.documents);
+      // setError(null);
+      // setIsLoading(true);
+
+      // Try to load documents from Supabase first
+      try {
+        const { data: supabaseData, error: supabaseError } = await supabase
+            .from('documents')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!supabaseError && supabaseData && supabaseData.length > 0) {
+          console.log('Documents loaded from Supabase:', supabaseData.length);
+
+          // Transform Supabase data to match Document interface
+          const transformedDocs = supabaseData.map(doc => ({
+            id: doc.id,
+            filename: doc.filename,
+            type: doc.type as DocumentType,
+            url: doc.url,
+            content: doc.content,
+            created_at: doc.created_at
+          }));
+
+          setDocs(transformedDocs);
+
+          // Update global store
+          if (typeof window !== 'undefined') {
+            window.docStore = transformedDocs;
+          }
+
+          // setIsLoading(false);
+          return;
+        } else if (supabaseError) {
+          console.error('Error loading documents from Supabase:', supabaseError);
+        }
+      } catch (supabaseError) {
+        console.error('Error loading documents from Supabase:', supabaseError);
+      }
+
+      // Fallback to API if Supabase fails
+      const response = await fetch('http://localhost:5000/api/documents');
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data && data.documents) {
+        setDocs(data.documents);
         // Update global store
         if (typeof window !== 'undefined') {
-          window.docStore = response.data.documents;
+          window.docStore = data.documents;
         }
       }
     } catch (error) {
       console.error('Error loading documents:', error);
-      setMessage({ 
-        type: 'error', 
-        content: 'Failed to load documents. Please try again.' 
-      });
+      // setError('Could not load your documents');
+    } finally {
+      // setIsLoading(false);
     }
   };
 
@@ -245,7 +295,7 @@ export default function Documents() {
                           onClick={() => handlePreview(doc)}
                         >
                           <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                            <FiFile className={doc.type === 'application/pdf' ? 'text-red-500' : 'text-blue-500'} size={24} />
+                            <FiFile className={doc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'} size={24} />
                           </div>
                           <div>
                             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]">
@@ -304,7 +354,7 @@ export default function Documents() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="p-2">
-                              <FiFile className={doc.type === 'application/pdf' ? 'text-red-500' : 'text-blue-500'} size={20} />
+                              <FiFile className={doc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'} size={20} />
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{doc.filename}</div>

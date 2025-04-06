@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { useTheme } from '../../../context/ThemeContext';
 import axios from 'axios';
-import { 
-  FiMessageSquare, 
-  FiTrash2, 
+import {
+  FiMessageSquare,
+  FiTrash2,
   FiSearch,
-  FiClock,
-  FiFile,
-  FiChevronRight
+  FiChevronRight,
+  FiFile
 } from 'react-icons/fi';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -23,6 +22,7 @@ interface ChatSession {
   createdAt: string;
   messageCount: number;
   lastMessage: string;
+  chatSessionId: number;
 }
 
 interface ChatMessage {
@@ -55,10 +55,10 @@ export default function Chats() {
     try {
       setLoading(true);
       setMessage({ type: '', content: '' }); // Clear any previous messages
-      
+
       console.log('Loading chat sessions for user:', user?.id);
       const response = await axios.get(`http://localhost:5000/api/chat-sessions/${user?.id}`);
-      
+
       if (response.data && response.data.sessions) {
         console.log('Loaded sessions:', response.data.sessions.length);
         setChatSessions(response.data.sessions);
@@ -78,16 +78,18 @@ export default function Chats() {
     }
   };
 
-  const loadSessionMessages = async (sessionId: string) => {
+  const loadSessionMessages = async (sessionId: number) => {
     try {
       setLoading(true);
       setMessage({ type: '', content: '' }); // Clear any previous messages
-      
+
       console.log('Loading messages for session:', sessionId);
       const response = await axios.get(`http://localhost:5000/api/chat-session/${sessionId}/messages`);
-      
-      if (response.data && response.data.messages) {
-        console.log('Loaded messages:', response.data.messages.length);
+
+      console.log('Response:', response.data);
+
+      if (response.data) {
+        console.log('Loaded messages:', response.data);
         setSessionMessages(response.data.messages);
       } else {
         console.log('No messages found or empty response');
@@ -107,7 +109,7 @@ export default function Chats() {
 
   const handleSessionClick = async (session: ChatSession) => {
     setSelectedSession(session);
-    await loadSessionMessages(session.id);
+    await loadSessionMessages(session.chatSessionId);
   };
 
   const handleDeleteSessions = async () => {
@@ -130,7 +132,7 @@ export default function Chats() {
         type: 'success',
         content: 'Chats deleted successfully'
       });
-      
+
       // If the selected session was deleted, clear it
       if (selectedSession && selectedSessions.includes(selectedSession.id)) {
         setSelectedSession(null);
@@ -148,17 +150,19 @@ export default function Chats() {
   };
 
   const toggleSessionSelection = (sessionId: string) => {
-    setSelectedSessions(prev => 
-      prev.includes(sessionId) 
-        ? prev.filter(id => id !== sessionId)
-        : [...prev, sessionId]
+    setSelectedSessions(prev =>
+        prev.includes(sessionId)
+            ? prev.filter(id => id !== sessionId)
+            : [...prev, sessionId]
     );
   };
 
   const filteredSessions = chatSessions.filter(session =>
-    session.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    session.docName.toLowerCase().includes(searchQuery.toLowerCase())
+      (session.lastMessage && session.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      session.docName.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  console.log("Chat sessions: ", chatSessions);
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
@@ -242,12 +246,14 @@ export default function Chats() {
               {filteredSessions.length > 0 && (
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[600px] overflow-y-auto">
                   {filteredSessions.map((session) => (
+
                     <li 
                       key={session.id}
                       className={`hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${
                         selectedSessions.includes(session.id) ? 'bg-blue-50 dark:bg-blue-900' : ''
                       } ${selectedSession?.id === session.id ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
                     >
+
                       <div className="flex items-center p-4" onClick={() => handleSessionClick(session)}>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center">
