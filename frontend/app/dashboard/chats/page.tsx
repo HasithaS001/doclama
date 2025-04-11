@@ -22,7 +22,7 @@ interface ChatSession {
   createdAt: string;
   messageCount: number;
   lastMessage: string;
-  chatSessionId: number;
+  chatSessionId: string;
 }
 
 interface ChatMessage {
@@ -78,7 +78,8 @@ export default function Chats() {
     }
   };
 
-  const loadSessionMessages = async (sessionId: number) => {
+  const loadSessionMessages = async (sessionId: string) => {
+
     try {
       setLoading(true);
       setMessage({ type: '', content: '' }); // Clear any previous messages
@@ -109,6 +110,7 @@ export default function Chats() {
 
   const handleSessionClick = async (session: ChatSession) => {
     setSelectedSession(session);
+    console.log('session: ',session);
     await loadSessionMessages(session.chatSessionId);
   };
 
