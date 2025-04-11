@@ -704,7 +704,7 @@ app.post('/api/chat', async (req, res) => {
             await supabase.from('chat_history').insert([{
               id: uuidv4(),
               user_id: req.body.userId || 'anonymous',
-              doc_id: Number(docId),
+              doc_id: docId,
               doc_name: doc.filename,
               doc_type: doc.type,
               question: '__new_chat_session__',
@@ -810,26 +810,22 @@ app.get('/api/document-info/:id', async (req, res) => {
     }
     
     // Find the actual file in the uploads directory
-    const files = fs.readdirSync(uploadsDir);
-    
-    // Look for a file that contains the document's filename
-    const matchingFile = files.find(file => file.includes(doc.filename));
-    
-    if (!matchingFile) {
-      console.error('No matching file found for:', doc.filename);
-      return res.status(404).json({ error: 'Document file not found on disk' });
+
+    const { data: fileData, error: fileError } = await supabase.storage
+        .from('documents').download(`${doc.user_id.toString()}/${doc.filename}`);
+
+    if (fileError || !fileData) {
+      console.error('Error creating signed URL for file:', fileError);
+      return res.status(500).json({ error: 'Unable to create file URL' });
     }
-    
-    // Create direct file URL
-    const fileUrl = `http://localhost:8000/uploads/${matchingFile}`;
-    
-    // Return document info with direct file URL
+
+    // Send document info along with file URL
     res.json({
       id: doc.id,
       filename: doc.filename,
       type: doc.type,
       created_at: doc.created_at,
-      file_url: fileUrl
+      file_url: fileData.url
     });
     
   } catch (error) {
@@ -945,7 +941,7 @@ app.get('/api/documents/:id/content', async (req, res) => {
     const { data: doc, error } = await supabase
         .from('documents')
         .select('*')
-        .eq('id', Number(id))
+        .eq('id', id)
         .single();
 
     if (error || !doc) {
@@ -969,6 +965,7 @@ app.get('/api/documents/:id/content', async (req, res) => {
       return res.status(500).json({ error: 'Failed to download file from storage' });
     }
 
+
     // Convert ReadableStream to Buffer
     const buffer = Buffer.from(await fileData.arrayBuffer());
 
@@ -991,7 +988,7 @@ app.get('/api/documents/:id/content', async (req, res) => {
     await supabase
         .from('documents')
         .update({ content: extractedText })
-        .eq('id', Number(id));
+        .eq('id', id);
 
     // Save in global cache
     global.docStore.push({ id, content: extractedText });
@@ -1029,7 +1026,7 @@ app.get('/api/document/:id', async (req, res) => {
         const { data, error } = await supabase
           .from('documents')
           .select('*')
-          .eq('id', Number(id))
+          .eq('id', id)
           .single();
         
         if (error) {
@@ -1058,21 +1055,16 @@ app.get('/api/document/:id', async (req, res) => {
       console.error('Document not found in database or local storage:', id);
       return res.status(404).json({ error: 'Document not found' });
     }
-    
-    // Find the actual file in the uploads directory
-    const files = fs.readdirSync(uploadsDir);
-    
-    // Look for a file that contains the document's filename
-    const matchingFile = files.find(file => file.includes(doc.filename));
-    
-    if (!matchingFile) {
-      console.error('No matching file found for:', doc.filename);
-      return res.status(404).json({ error: 'Document file not found on disk' });
+
+    const { data: fileData, error: fileError } = await supabase.storage
+        .from('documents').download(`${doc.user_id.toString()}/${doc.filename}`);
+
+    if (fileError || !fileData) {
+      console.error('Failed to download file from storage:', fileError);
+      return res.status(500).json({ error: 'Failed to download file from storage' });
     }
-    
-    // Get the full file path
-    const filePath = path.join(uploadsDir, matchingFile);
-    
+
+
     // Determine content type based on file extension
     const fileExt = path.extname(doc.filename).toLowerCase();
     let contentType = 'application/octet-stream'; // Default content type
@@ -1088,10 +1080,8 @@ app.get('/api/document/:id', async (req, res) => {
     // Set appropriate headers
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${doc.filename}"`);
-    
-    // Stream the file
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
+
+    fileData.pipe(res);
     
   } catch (error) {
     console.error('Error serving document:', error);
@@ -1125,26 +1115,13 @@ app.get('/api/document/:id/text', async (req, res) => {
       console.error('Document not found in database:', id);
       return res.status(404).json({ error: 'Document not found' });
     }
-    
-    // Find the actual file in the uploads directory
-    const files = fs.readdirSync(uploadsDir);
-    
-    // Look for a file that ends with the document's filename
-    const matchingFile = files.find(file => file.endsWith(doc.filename));
-    
-    if (!matchingFile) {
-      console.error('No matching file found for:', doc.filename);
-      return res.status(404).json({ error: 'Document file not found on disk' });
-    }
-    
-    // Get the full file path
-    const filePath = path.join(uploadsDir, matchingFile);
-    console.log('Found file path for text extraction:', filePath);
-    
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      console.error('File not found on disk:', filePath);
-      return res.status(404).json({ error: 'Document file not found on disk' });
+
+    const { data: fileData, error: fileError } = await supabase.storage
+        .from('documents').download(`${doc.user_id.toString()}/${doc.filename}`);
+
+    if (fileError || !fileData) {
+      console.error('Failed to download file from storage:', fileError);
+      return res.status(500).json({ error: 'Failed to download file from storage' });
     }
     
     // Check if it's a Word document
@@ -1680,7 +1657,7 @@ app.get('/api/documents/:id/preview', async (req, res) => {
     // Get the file from storage
     const { data: fileData, error: storageError } = await supabase.storage
       .from('documents')
-      .download(doc.filepath);
+      .download(`${doc.user_id.toString()}/${doc.filename}`);
 
     if (storageError) {
       console.error('Error downloading file:', storageError);
@@ -1776,6 +1753,7 @@ app.get('/api/chat-sessions/:userId', async (req, res) => {
           docName: chat.doc_name || 'Untitled Document',
           docType: chat.doc_type || 'unknown',
           createdAt: chat.created_at,
+          chatSessionId: chat.chat_session_id,
           messageCount: sessionMessages.length,
           lastMessage: sessionMessages.length > 0 
             ? sessionMessages.sort((a, b) => 
@@ -1818,7 +1796,8 @@ app.get('/api/chat-sessions/:userId', async (req, res) => {
           docType: chat.doc_type || 'unknown',
           createdAt: chat.created_at,
           messageCount: relatedMessages.length,
-          lastMessage: chat.question || 'No message'
+          lastMessage: chat.question || 'No message',
+          chatSessionId: chat.chat_session_id,
         });
       }
     }
@@ -1850,8 +1829,8 @@ app.get('/api/chat-session/:sessionId/messages', async (req, res) => {
     const { data: sessionEntry, error: sessionError } = await supabase
       .from('chat_history')
       .select('*')
-      .eq('id', sessionId)
-      .single();
+      .eq('chat_session_id', sessionId)
+      .maybeSingle();
       
     if (sessionError) {
       console.error('Error fetching session entry:', sessionError);
