@@ -32,3 +32,32 @@ interface Window {
 }
 
 declare var window: Window;
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+interface NewWebhookEvent {
+  id: number;
+  createdAt: Date;
+  eventName: string;
+  processed: boolean;
+  body: JsonValue;
+  processingError: string;
+}
+
+interface NewSubscription {
+  lemon_squeezy_id: string;
+  order_id: number;
+  name: string;
+  email: string;
+  status: string;
+  status_formatted: string;
+  renews_at: string;
+  ends_at: string;
+  trial_ends_at: string;
+  price: string;
+  is_usage_based: boolean;
+  is_paused: boolean;
+  subscription_item_id: number;
+  user_id: string;
+  plan_id: number;
+}

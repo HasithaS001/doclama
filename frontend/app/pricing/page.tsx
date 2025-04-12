@@ -5,12 +5,15 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { FiArrowRight, FiCheckCircle, FiMessageSquare, FiX, FiCheck } from 'react-icons/fi';
 import Header from '../components/Header';
+import {getCheckoutURL} from "@/app/actions";
+import {useAuth} from "@/context/AuthContext";
 
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const testimonialRef = useRef<HTMLDivElement>(null);
+  const {session} = useAuth();
 
   const toggleFaq = (index: number) => {
     if (activeFaq === index) {
@@ -19,6 +22,16 @@ export default function PricingPage() {
       setActiveFaq(index);
     }
   };
+
+
+  const subscribeBasicPlan = async () => {
+    try {
+      const checkoutUrl = await getCheckoutURL(758320, session?.user, true);
+      checkoutUrl && window.open(checkoutUrl);
+    }catch (error) {
+      console.log(error);
+    }
+  }
 
   // Auto-scroll testimonials
   useEffect(() => {
@@ -184,12 +197,12 @@ export default function PricingPage() {
                     <span>API access</span>
                   </li>
                 </ul>
-                <Link
-                  href="/auth"
+                <button
+                    onClick={subscribeBasicPlan}
                   className="block w-full bg-white hover:bg-gray-50 text-[#6265fa] py-3 rounded-lg text-center font-medium transition-colors"
                 >
                   Get Started
-                </Link>
+                </button>
               </div>
             </div>
 
