@@ -172,7 +172,7 @@ export async function processWebhookEvent(webhookEvent: NewWebhookEvent) {
                     if (error) console.error(error);
 
                 } catch (error) {
-                    processingError = `Failed to upsert Subscription #${updateData.lemonSqueezyId} to the database.`;
+                    processingError = `Failed to upsert Subscription #${updateData.lemon_squeezy_id} to the database.`;
                     console.error(error);
                 }
             }
@@ -192,4 +192,68 @@ export async function processWebhookEvent(webhookEvent: NewWebhookEvent) {
 
         if (updateError) console.error(updateError);
     }
+}
+
+export async function getUserSubscriptions(userId: string) {
+
+    if (!userId) {
+        notFound();
+    }
+
+    const { data: userSubscriptions, error } = await supabase
+        .from('subscription')
+        .select("*")
+        .eq("user_id", userId);
+
+    if (error) {
+        console.error("Error fetching subscriptions:", error);
+        return [];
+    }
+
+    revalidatePath("/");
+
+
+    return userSubscriptions;
+}
+
+
+export async function pauseUserSubscription({id, userId}: {id: string, userId: string}) {
+    configureLemonSqueezy();
+
+    // Get user subscriptions
+    const userSubscriptions = await getUserSubscriptions(userId);
+
+    // Check if the subscription exists
+    const subscription = userSubscriptions.find(
+        (sub) => sub.lemon_squeezy_id === id,
+    );
+
+    if (!subscription) {
+        throw new Error(`Subscription #${id} not found.`);
+    }
+
+    const returnedSub = await updateSubscription(id, {
+        pause: {
+            mode: "void",
+        },
+    });
+
+    // Update the db
+    try {
+        await supabase
+            .from('subscription')
+            .update({
+                status: returnedSub.data?.data.attributes.status,
+                status_formatted: returnedSub.data?.data.attributes.status_formatted,
+                ends_at: returnedSub.data?.data.attributes.ends_at,
+                is_paused: returnedSub.data?.data.attributes.pause !== null,
+            })
+            .eq('lemon_squeezy_id', id);
+    } catch (error) {
+        throw new Error(`Failed to pause Subscription #${id} in the database.`);
+    }
+
+    revalidatePath("/");
+
+    return returnedSub;
 }

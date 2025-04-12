@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import { useAuth } from '../../../context/AuthContext';
 import { useTheme } from '../../../context/ThemeContext';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { 
   FiUser, 
   FiMail, 
@@ -17,9 +17,10 @@ import {
   FiLayout,
   FiKey
 } from 'react-icons/fi';
+import { getUserSubscriptions, pauseUserSubscription} from "@/app/actions";
+import { supabase} from '@/lib/supabase'
 
 export default function Settings() {
-  const supabase = createClientComponentClient();
   const { user, updateUserProfile, updateUserEmail, updateUserPassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [displayName, setDisplayName] = useState('');
@@ -30,6 +31,20 @@ export default function Settings() {
   const [message, setMessage] = useState({ type: '', content: '' });
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
+  const [userSubscriptions, setUserSubscriptions] = useState<any[]>([]);
+
+  // Fetch subscriptions
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (user?.id) {
+        await getUserSubscriptions(user.id)
+            .then((subs) => setUserSubscriptions(subs))
+            .catch((error) => console.error('Failed to fetch subscriptions:', error));
+      }
+    }
+
+    fetchSubscription();
+  }, [user]);
 
   // Initialize state with user data when component mounts
   useEffect(() => {
@@ -54,6 +69,7 @@ export default function Settings() {
       }
     };
 
+
     // Subscribe to auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(handleAuthStateChange);
 
@@ -62,6 +78,20 @@ export default function Settings() {
       authListener.subscription.unsubscribe();
     };
   }, [user]);
+
+
+  const sortedSubscriptions = userSubscriptions.sort((a, b) => {
+    if (a.status === "active" && b.status !== "active") {
+      return -1;
+    }
+
+    if (a.status === "paused" && b.status === "cancelled") {
+      return -1;
+    }
+
+    return 0;
+  });
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,6 +309,23 @@ export default function Settings() {
                           placeholder="Your name"
                         />
                       </div>
+
+                      {sortedSubscriptions.map((subscription) => (
+                          <button key={subscription.id} onClick={async () => {
+                            setLoading(true);
+                            try {
+                              if(user?.id){
+                                await pauseUserSubscription({ id: subscription.lemon_squeezy_id, userId: user.id });
+                              }
+                              // Optionally refresh subscriptions here
+
+                            } catch (err) {
+                              console.error("Pause failed", err);
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}>Pause</button>
+                      ))}
                     </div>
                   </div>
                   <div className="mt-6">
