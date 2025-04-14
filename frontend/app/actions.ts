@@ -257,3 +257,83 @@ export async function pauseUserSubscription({id, userId}: {id: string, userId: s
 
     return returnedSub;
 }
+
+export async function unpauseUserSubscription({id, userId}: {id: string, userId: string}) {
+    configureLemonSqueezy();
+
+    // Get user subscriptions
+    const userSubscriptions = await getUserSubscriptions(userId);
+
+    // Check if the subscription exists
+    const subscription = userSubscriptions.find(
+        (sub) => sub.lemon_squeezy_id === id,
+    );
+
+    if (!subscription) {
+        throw new Error(`Subscription #${id} not found.`);
+    }
+
+    const returnedSub = await updateSubscription(id, { pause: null });
+
+    // Update the db
+    try {
+        await supabase
+            .from('subscription')
+            .update({
+                status: returnedSub.data?.data.attributes.status,
+                statusFormatted: returnedSub.data?.data.attributes.status_formatted,
+                endsAt: returnedSub.data?.data.attributes.ends_at,
+                isPaused: returnedSub.data?.data.attributes.pause !== null,
+            })
+            .eq('lemon_squeezy_id', id);
+    } catch (error) {
+        throw new Error(`Failed to pause Subscription #${id} in the database.`);
+    }
+
+    revalidatePath("/");
+
+    return returnedSub;
+}
+
+export async function cancelSub({id, userId}: {id: string, userId: string}) {
+    configureLemonSqueezy();
+
+    // Get user subscriptions
+    const userSubscriptions = await getUserSubscriptions(userId);
+
+    // Check if the subscription exists
+    const subscription = userSubscriptions.find(
+        (sub) => sub.lemon_squeezy_id === id,
+    );
+
+    if (!subscription) {
+        throw new Error(`Subscription #${id} not found.`);
+    }
+
+    const cancelledSub = await cancelSubscription(id);
+
+    if (cancelledSub.error) {
+        throw new Error(cancelledSub.error.message);
+    }
+
+    // Update the db
+    try {
+        await supabase
+            .from('subscription')
+            .update({
+                status: cancelledSub.data.data.attributes.status,
+                statusFormatted: cancelledSub.data.data.attributes.status_formatted,
+                endsAt: cancelledSub.data.data.attributes.ends_at,
+            })
+            .eq('lemon_squeezy_id', id);
+
+    } catch (error) {
+        throw new Error(`Failed to cancel Subscription #${id} in the database.`);
+    }
+
+    revalidatePath("/");
+
+    return cancelledSub;
+}
+
+

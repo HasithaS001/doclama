@@ -2022,6 +2022,26 @@ export default function Dashboard() {
 
       console.log("File upload initiated");
 
+      const { data: subscriptions, error: subError } = await supabase
+          .from('subscription')
+          .select('*')
+          .eq('user_id', user?.id)
+          .order('created_at', { ascending: false });
+
+      if (subError && subError.code !== 'PGRST116') {
+        throw new Error('Failed to fetch subscription details');
+      }
+
+// Get the latest active or paused subscription
+      const currentSub = subscriptions?.find(
+          sub => sub.status === 'active' || sub.status === 'paused'
+      );
+
+      console.log(currentSub)
+
+      // If no active/paused sub, assume Free Plan
+      const isBasicPlanActive = currentSub?.status === 'active' || false;
+
       // Extract file from event
       const file = e instanceof File ? e : e.target?.files?.[0];
       if (!file) {
@@ -2029,6 +2049,35 @@ export default function Dashboard() {
       }
 
       console.log("File selected:", file);
+
+      if (!isBasicPlanActive) {
+        // Limit to 5 documents per month
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        const { data: docs, error: docError } = await supabase
+            .from('documents')
+            .select('id', { count: 'exact' })
+            .eq('user_id', user?.id)
+            .gte('created_at', startOfMonth.toISOString());
+
+        if (docError) {
+          throw new Error('Failed to count user documents this month');
+        }
+
+        if (docs.length >= 3) {
+          throw new Error('You have reached your 3-document upload limit for this month. Upgrade to Basic for unlimited uploads.');
+        }
+
+        // File size limit: 5MB
+        const maxSize = 3 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+          throw new Error('File size exceeds 5MB limit for free users. Upgrade to Basic for unlimited size.');
+        }
+      }
+
+
 
       // Upload file to Supabase Storage
       const filePath = `${user?.id}/${file.name}`;
