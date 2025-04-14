@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import { useAuth } from '../../../context/AuthContext';
 import { useTheme } from '../../../context/ThemeContext';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { 
   FiUser, 
   FiMail, 
@@ -17,9 +17,11 @@ import {
   FiLayout,
   FiKey
 } from 'react-icons/fi';
+import { getUserSubscriptions, pauseUserSubscription, unpauseUserSubscription, cancelSub} from "@/app/actions";
+import { supabase} from '@/lib/supabase'
+import Link from "next/link";
 
 export default function Settings() {
-  const supabase = createClientComponentClient();
   const { user, updateUserProfile, updateUserEmail, updateUserPassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [displayName, setDisplayName] = useState('');
@@ -30,6 +32,21 @@ export default function Settings() {
   const [message, setMessage] = useState({ type: '', content: '' });
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
+  const [userSubscriptions, setUserSubscriptions] = useState<any[]>([]);
+
+
+  // Fetch subscriptions
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (user?.id) {
+        await getUserSubscriptions(user.id)
+            .then((subs) => setUserSubscriptions(subs))
+            .catch((error) => console.error('Failed to fetch subscriptions:', error));
+      }
+    }
+
+    fetchSubscription();
+  }, [user]);
 
   // Initialize state with user data when component mounts
   useEffect(() => {
@@ -54,6 +71,7 @@ export default function Settings() {
       }
     };
 
+
     // Subscribe to auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(handleAuthStateChange);
 
@@ -62,6 +80,17 @@ export default function Settings() {
       authListener.subscription.unsubscribe();
     };
   }, [user]);
+
+
+  const sortedSubscriptions = userSubscriptions.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const currentSubscription = sortedSubscriptions.find(
+      sub => sub.status === 'active' || sub.status === 'paused'
+  ) || sortedSubscriptions[0];
+
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,6 +308,8 @@ export default function Settings() {
                           placeholder="Your name"
                         />
                       </div>
+
+
                     </div>
                   </div>
                   <div className="mt-6">
@@ -292,6 +323,86 @@ export default function Settings() {
                     </button>
                   </div>
                 </form>
+
+                <div className='mt-5 w-1/3'>
+                  <h1 className='text-lg leading-6 font-medium text-gray-900 dark:text-gray-100'>Subscription Plan</h1>
+                  {currentSubscription ? (
+                      <div className='border-2 border-white p-2 mt-2 flex'>
+                        {currentSubscription.status !== 'cancelled' ? (
+                            <div>
+                              <h2 className='leading-4 font-medium text-gray-900 dark:text-gray-100'>
+                                Basic Plan
+                              </h2>
+                              <div className='flex items-center gap-2 mt-5'>
+                                {currentSubscription.status === 'active' ? (
+                                    <button onClick={async () => {
+                                      setLoading(true);
+                                      try {
+                                        if(user?.id){
+                                          await pauseUserSubscription({ id: currentSubscription.lemon_squeezy_id, userId: user.id });
+                                        }
+                                      } catch (err) {
+                                        console.error("Pause failed", err);
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }} className='inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-700  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50'>Pause</button>
+                                ) : (
+                                    <button onClick={async () => {
+                                      setLoading(true);
+                                      try {
+                                        if(user?.id){
+                                          await unpauseUserSubscription({ id: currentSubscription.lemon_squeezy_id, userId: user.id });
+                                        }
+                                      } catch (err) {
+                                        console.error("Unpause failed", err);
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }} className='inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-700  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50'>Unpause</button>
+                                )}
+
+                                <button onClick={async () => {
+                                  setLoading(true);
+                                  try {
+                                    if(user?.id && confirm('Please confirm if you want to cancel your subscription.')) {
+                                      await cancelSub({ id: currentSubscription.lemon_squeezy_id, userId: user.id });
+                                    }
+                                  } catch (err) {
+                                    console.error("Cancel failed", err);
+                                  } finally {
+                                    setLoading(false);
+                                  }
+                                }} className='inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50'>Cancel Subscription</button>
+                              </div>
+                            </div>
+                        ) : (
+                            <div>
+                              <h2 className='leading-4 font-medium text-gray-900 dark:text-gray-100'>
+                                Free Plan
+                              </h2>
+                              <div className='flex items-center gap-2 mt-5'>
+                                <Link href='/pricing' className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">Upgrade Plan</Link>
+                              </div>
+                            </div>
+                        )}
+                      </div>
+                  ) : (
+                      // If there are no subscriptions at all (new user)
+                      <div className='border-2 border-white p-2 mt-2 flex'>
+                        <div>
+                          <h2 className='leading-4 font-medium text-gray-900 dark:text-gray-100'>
+                            Free Plan
+                          </h2>
+                          <div className='flex items-center gap-2 mt-5'>
+                            <Link href='/pricing' className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">Upgrade Plan</Link>
+                          </div>
+                        </div>
+                      </div>
+                  )}
+
+
+                </div>
               </div>
             </div>
           </div>
